@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+# voluptuous ships with Home Assistant, so it is not a manifest requirement.
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow
 from homeassistant.data_entry_flow import FlowResult
@@ -100,6 +101,10 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_login(self, code: str | None = None, update_existing: bool = False) -> FlowResult:
+        """Log in, then store the session and watch list.
+
+        The password is used for this call only. Later polls use the access token.
+        """
         client = ZteKidsClient(async_get_clientsession(self.hass))
         session = await client.login(self._phone, self._password, code)
         devices = await client.list_devices(session["openid"], session["accesstoken"])

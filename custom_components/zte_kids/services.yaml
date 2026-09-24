@@ -1,3 +1,4 @@
+# Target a watch. With no target, every configured watch is asked, still once a minute per watch.
 refresh_location:
   target:
     device:

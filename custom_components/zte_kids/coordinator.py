@@ -19,7 +19,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ZteKidsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
-    """Poll stored history, and request a fresh fix only when asked."""
+    """Poll stored history on the update interval.
+
+    A live GPS request goes out only from async_request_fresh_fix, and then
+    at most once a minute per watch.
+    """
 
     def __init__(self, hass: HomeAssistant, entry_data: dict[str, Any]) -> None:
         super().__init__(
@@ -60,11 +64,13 @@ class ZteKidsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 skipped[imei] = f"Wait {int(wait)}s before asking this watch again."
             else:
                 due.append(imei)
+                # Reserve the slot before the request so overlapping calls cannot both wake the watch.
                 self._last_wake[imei] = now
         if due:
             try:
                 data = await self._fetch(wake=True, imeis=due)
             except ZteKidsError as err:
+                # The request never landed, so the next call may try again immediately.
                 for imei in due:
                     self._last_wake.pop(imei, None)
                 raise
@@ -86,6 +92,8 @@ class ZteKidsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             point = None
             if wake:
                 point = await self.client.request_location(imei, openid, token)
+            # Scheduled updates skip the wake call. A wake that returns nothing
+            # still falls back to today's stored history.
             if point is None:
                 point = await self.client.query_location_history(
                     imei,
