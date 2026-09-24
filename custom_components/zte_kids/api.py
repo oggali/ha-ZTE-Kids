@@ -45,6 +45,11 @@ def mobile_type() -> str:
     return "HomeAssistant;ZTEKids;Android;14"
 
 
+def captcha_destination_type(account: str) -> str:
+    """EMAIL when the account contains @, otherwise MOBILE_PHONE. Same split as the app."""
+    return "EMAIL" if "@" in account else "MOBILE_PHONE"
+
+
 def sign_body(body: dict[str, Any], timestamp: str, nonce: str) -> str:
     """SHA-256 of the sorted key=value pairs, including a trailing ampersand.
 
@@ -73,13 +78,16 @@ class ZteKidsClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
 
-    async def login(self, phone: str, password: str, code: str | None = None) -> dict[str, Any]:
-        """Log in the same way as the phone: loginName, encrypted password, dypwdFlag N."""
+    async def login(self, account: str, password: str, code: str | None = None) -> dict[str, Any]:
+        """Log in the same way as the app: loginName, encrypted password, dypwdFlag N.
+
+        The international app puts the email address in loginName.
+        """
         body: dict[str, Any] = {
             "dypwdFlag": "N",
             "jigsawCode": "",
             "kid": "",
-            "loginName": phone,
+            "loginName": account,
             "mobileType": mobile_type(),
             "password": encrypt_password(password),
         }
@@ -94,19 +102,21 @@ class ZteKidsClient:
         return {
             "accesstoken": token,
             "openid": openid,
-            "user_name": data.get("userName") or phone,
+            "user_name": data.get("userName") or account,
             "token_expire_time": data.get("token_expire_time"),
         }
 
-    async def send_captcha(self, phone: str) -> None:
-        """Ask the server to send a verification code for this phone."""
+    async def send_captcha(self, account: str) -> None:
+        """Ask the server to send a verification code to this email or phone."""
         await self._signed_post(
             "api/account/sendcaptcha",
             {
-                "destinationType": "phone",
+                "destination": account,
+                "destinationType": captcha_destination_type(account),
+                "jigsawCode": "",
+                "kid": "",
                 "language": "en",
                 "verificationCodeType": "login",
-                "destination": phone,
             },
         )
 

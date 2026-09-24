@@ -3,15 +3,15 @@
     "step": {
       "user": {
         "title": "ZTE Kids",
-        "description": "Sign in with the same phone number and password as the ZTE Kids app.",
+        "description": "Sign in with the same email and password as the ZTE Kids app.",
         "data": {
-          "phone": "Phone number",
+          "email": "Email",
           "password": "Password"
         }
       },
       "code": {
         "title": "Verification code",
-        "description": "The server asked for a code. Enter the text-message code for this phone.",
+        "description": "The server asked for a code. Enter the verification code sent to this email."
         "data": {
           "code": "Code"
         }
@@ -25,7 +25,7 @@
       }
     },
     "error": {
-      "invalid_auth": "Phone number or password was rejected.",
+      "invalid_auth": "Email or password was rejected.",
       "cannot_connect": "Could not reach ZTE Kids."
     },
     "abort": {
