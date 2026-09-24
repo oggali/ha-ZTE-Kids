@@ -28,6 +28,7 @@ def _load(name: str, filename: str):
 _const = _load("custom_components.zte_kids.const", "const.py")
 _api = _load("custom_components.zte_kids.api", "api.py")
 ZteKidsAuthError = _api.ZteKidsAuthError
+captcha_destination_type = _api.captcha_destination_type
 _latest_point = _api._latest_point
 _raise_for_api_error = _api._raise_for_api_error
 sign_body = _api.sign_body
@@ -58,6 +59,10 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(point["lat"], 60.1)
         self.assertEqual(point["lon"], 24.9)
         self.assertEqual(point["address"], "School")
+
+    def test_captcha_destination_follows_account(self) -> None:
+        self.assertEqual(captcha_destination_type("parent@example.com"), "EMAIL")
+        self.assertEqual(captcha_destination_type("+358401234567"), "MOBILE_PHONE")
 
     def test_login_failed_is_auth(self) -> None:
         with self.assertRaises(ZteKidsAuthError):

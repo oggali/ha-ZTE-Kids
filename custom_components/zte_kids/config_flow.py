@@ -15,6 +15,7 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CODE,
     CONF_DEVICES,
+    CONF_EMAIL,
     CONF_OPENID,
     CONF_PASSWORD,
     CONF_PHONE,
@@ -24,18 +25,18 @@ from .const import (
 
 
 class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Sign in with the same phone login the ZTE Kids app uses."""
+    """Sign in with the same email and password the ZTE Kids app uses."""
 
     VERSION = 1
 
     def __init__(self) -> None:
-        self._phone = ""
+        self._account = ""
         self._password = ""
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            self._phone = user_input[CONF_PHONE].strip()
+            self._account = user_input[CONF_EMAIL].strip()
             self._password = user_input[CONF_PASSWORD]
             try:
                 return await self._async_login()
@@ -49,7 +50,7 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_PHONE, default=self._phone): str,
+                    vol.Required(CONF_EMAIL, default=self._account): str,
                     vol.Required(CONF_PASSWORD): str,
                 }
             ),
@@ -62,7 +63,7 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
         client = ZteKidsClient(async_get_clientsession(self.hass))
         if user_input is None:
             try:
-                await client.send_captcha(self._phone)
+                await client.send_captcha(self._account)
             except ZteKidsError:
                 errors["base"] = "cannot_connect"
         else:
@@ -79,7 +80,7 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
-        self._phone = entry_data.get(CONF_PHONE, "")
+        self._account = entry_data.get(CONF_EMAIL) or entry_data.get(CONF_PHONE, "")
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -106,13 +107,13 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
         The password is used for this call only. Later polls use the access token.
         """
         client = ZteKidsClient(async_get_clientsession(self.hass))
-        session = await client.login(self._phone, self._password, code)
+        session = await client.login(self._account, self._password, code)
         devices = await client.list_devices(session["openid"], session["accesstoken"])
         if not devices:
             return self.async_abort(reason="no_devices")
         await self.async_set_unique_id(session["openid"])
         data = {
-            CONF_PHONE: self._phone,
+            CONF_EMAIL: self._account,
             CONF_ACCESS_TOKEN: session["accesstoken"],
             CONF_OPENID: session["openid"],
             CONF_USER_NAME: session["user_name"],
@@ -123,5 +124,5 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.hass.config_entries.async_reload(self.context["entry_id"])
             return self.async_abort(reason="reauth_successful")
         self._abort_if_unique_id_configured()
-        title = session["user_name"] or self._phone
+        title = session["user_name"] or self._account
         return self.async_create_entry(title=title, data=data)

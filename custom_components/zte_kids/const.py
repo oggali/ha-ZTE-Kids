@@ -15,6 +15,8 @@ APP_SECRET = "fR1gX2AEiYxflz8sVsLFzfwTOfk8NzBu"
 # AES-GCM key the Android app uses before it sends the password.
 PASSWORD_KEY = b"YNSSFWTeip5M2hSzmpoW4dXr0rWTc0Wr"
 
+# Stored account id. Older entries used "phone"; reauth still reads that key.
+CONF_EMAIL = "email"
 CONF_PHONE = "phone"
 CONF_PASSWORD = "password"
 CONF_CODE = "code"

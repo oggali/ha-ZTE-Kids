@@ -32,7 +32,7 @@ The version in `manifest.json` is `Year.Month.Day`. Pushing a new version to `ma
 
 ## Setup
 
-Add the **ZTE Kids** integration and sign in with the phone number and password from the ZTE Kids app.
+Add the **ZTE Kids** integration and sign in with the email and password from the ZTE Kids app. The international app accepts an email address, and that address is sent as `loginName`.
 
 - Login uses the password once. The config entry keeps the access token, openid, display name, and the list of watches.
 - When the server asks for a verification code, a second step requests a text message and asks you to enter it.
