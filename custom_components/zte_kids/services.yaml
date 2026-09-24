@@ -1,0 +1,4 @@
+refresh_location:
+  target:
+    device:
+      integration: zte_kids

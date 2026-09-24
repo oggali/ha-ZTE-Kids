@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ZTE Kids",
+        "description": "Sign in with the same phone number and password as the ZTE Kids app.",
+        "data": {
+          "phone": "Phone number",
+          "password": "Password"
+        }
+      },
+      "code": {
+        "title": "Verification code",
+        "description": "The server asked for a code. Enter the text-message code for this phone.",
+        "data": {
+          "code": "Code"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Sign in again",
+        "description": "The saved session was rejected. Enter the ZTE Kids password again.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Phone number or password was rejected.",
+      "cannot_connect": "Could not reach ZTE Kids."
+    },
+    "abort": {
+      "already_configured": "This ZTE Kids account is already configured.",
+      "no_devices": "This account has no watches.",
+      "reauth_successful": "Signed in again."
+    }
+  },
+  "entity": {
+    "device_tracker": {
+      "watch": {
+        "name": "Watch"
+      }
+    }
+  },
+  "services": {
+    "refresh_location": {
+      "name": "Refresh location",
+      "description": "Ask the watch for a new location. Limited to once a minute per watch so the battery is not drained."
+    }
+  }
+}

@@ -1,3 +1,10 @@
+# Environment variables
+.env
+.env.local
+.venv/
+
+com.nubia.care/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
