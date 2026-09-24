@@ -11,7 +11,7 @@ name: Release
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "custom_components/zte_kids/manifest.json"
 
