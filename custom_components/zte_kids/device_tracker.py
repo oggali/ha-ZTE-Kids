@@ -27,6 +27,8 @@ async def async_setup_entry(
 class ZteKidsTracker(CoordinatorEntity[ZteKidsCoordinator], TrackerEntity):
     """Last known position of one watch."""
 
+    # Name comes from entity.device_tracker.watch in strings.json ("Watch"),
+    # shown as "<device name> Watch".
     _attr_has_entity_name = True
     _attr_translation_key = "watch"
     _attr_name = None
@@ -64,6 +66,7 @@ class ZteKidsTracker(CoordinatorEntity[ZteKidsCoordinator], TrackerEntity):
     @property
     def location_accuracy(self) -> int:
         point = self._point or {}
+        # TrackerEntity wants an int. Missing radius is reported as 0.
         radius = point.get("accuracy")
         if radius is None:
             return 0

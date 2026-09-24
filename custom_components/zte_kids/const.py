@@ -1,12 +1,18 @@
-"""Constants for the ZTE Kids integration."""
+"""Constants for the ZTE Kids integration.
+
+aiohttp, cryptography, and voluptuous already ship with Home Assistant, so
+manifest.json keeps requirements empty. These client keys are from the app
+binary; they are not account secrets and the user does not enter them.
+"""
 
 DOMAIN = "zte_kids"
 
 BASE_URL = "https://care-api.nubia.com/"
 
-# Client keys from the international build (eb.b when both region flags are false).
+# Public client credentials from the international build (eb.b when both region flags are false).
 APP_KEY = "U7yJRy5eO0DKTlNVrnx4z5ICm5y16a4S"
 APP_SECRET = "fR1gX2AEiYxflz8sVsLFzfwTOfk8NzBu"
+# AES-GCM key the Android app uses before it sends the password.
 PASSWORD_KEY = b"YNSSFWTeip5M2hSzmpoW4dXr0rWTc0Wr"
 
 CONF_PHONE = "phone"
@@ -20,8 +26,10 @@ CONF_DEVICES = "devices"
 ATTR_IMEI = "imei"
 ATTR_NAME = "name"
 
-# Asking the watch for a fix is rate limited. History polling is separate.
+# request_location can wake the watch, so refresh_location waits at least this
+# long between calls for the same IMEI. History polling does not use this limit.
 MIN_REFRESH_SECONDS = 60
+# How often stored location history is read. That call does not wake the watch.
 HISTORY_UPDATE_SECONDS = 300
 
 PLATFORMS = ["device_tracker"]

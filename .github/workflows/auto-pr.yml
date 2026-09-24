@@ -55,7 +55,7 @@ jobs:
               return match ? match[1] : null;
             }
 
-            const base = overrideBase(commitMessage) || "master";
+            const base = overrideBase(commitMessage) || "main";
             const title = titleFromBranch(head);
 
             if (head === base) {

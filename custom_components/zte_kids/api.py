@@ -10,6 +10,7 @@ import uuid
 from typing import Any
 from urllib.parse import urljoin
 
+# Both are Home Assistant core dependencies, so they stay out of manifest requirements.
 import aiohttp
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -45,7 +46,11 @@ def mobile_type() -> str:
 
 
 def sign_body(body: dict[str, Any], timestamp: str, nonce: str) -> str:
-    """SHA-256 of the sorted key=value pairs, including a trailing ampersand."""
+    """SHA-256 of the sorted key=value pairs, including a trailing ampersand.
+
+    The app's signer always leaves the last "&" in place and appends APP_SECRET
+    after it. Dropping that ampersand produces a signature the server rejects.
+    """
     pairs = {_stringify(key): _stringify(value) for key, value in body.items() if value is not None}
     pairs["timestamp"] = timestamp
     pairs["nonce"] = nonce
@@ -216,6 +221,8 @@ class ZteKidsClient:
 
 
 def _raise_for_api_error(payload: dict[str, Any]) -> None:
+    # Success is code/ret 0 or 200. Captcha text means the login needs a second
+    # step. 1132/1022 and token wording mean the saved session is dead.
     code = payload.get("code", payload.get("ret"))
     if code is None or code in _SUCCESS_CODES:
         return
@@ -252,7 +259,9 @@ def _walk_points(node: Any) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     if isinstance(node, dict):
         lat = node.get("lat", node.get("latitude"))
+        # Some payloads spell longitude "lot".
         lon = node.get("lon", node.get("lot", node.get("longitude")))
+        # 0,0 is an empty fix from the server, not a real position.
         if _is_number(lat) and _is_number(lon) and not (float(lat) == 0 and float(lon) == 0):
             stamp = node.get("timestamp") or node.get("location_time") or node.get("gps_time") or node.get("stamp")
             found.append(

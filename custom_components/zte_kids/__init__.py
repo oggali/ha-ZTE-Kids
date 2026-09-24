@@ -20,6 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZteKidsConfigEntry) -> b
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
+    # One domain service for every config entry. The last unload removes it.
     if not hass.services.has_service(DOMAIN, SERVICE_REFRESH_LOCATION):
 
         async def _async_refresh(call: ServiceCall) -> None:
@@ -39,6 +40,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZteKidsConfigEntry) -> b
                 messages.extend(skipped.values())
             if not refreshed:
                 raise HomeAssistantError("No ZTE Kids watch matched this target.")
+            # A partial refresh still succeeds. Fail only when every targeted watch was inside the cooldown.
             if messages and imeis and len(messages) == len(imeis):
                 raise HomeAssistantError(messages[0])
 
@@ -58,6 +60,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ZteKidsConfigEntry) -> 
 
 
 def _imeis_from_call(hass: HomeAssistant, call: ServiceCall) -> list[str]:
+    """Map device-registry targets to watch IMEIs.
+
+    An empty list means the caller did not target a device, so every watch is in scope.
+    """
     device_ids = call.data.get("device_id")
     if not device_ids:
         return []
