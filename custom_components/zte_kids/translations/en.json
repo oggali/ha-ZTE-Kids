@@ -11,7 +11,7 @@
       },
       "code": {
         "title": "Verification code",
-        "description": "The server asked for a code. Enter the verification code sent to this email."
+        "description": "The server asked for a code. Enter the verification code sent to this email.",
         "data": {
           "code": "Code"
         }
