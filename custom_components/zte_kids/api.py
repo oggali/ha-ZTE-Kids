@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 import time
 import uuid
@@ -16,6 +17,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from .const import APP_KEY, APP_SECRET, BASE_URL, PASSWORD_KEY
 
+_LOGGER = logging.getLogger(__name__)
 _SUCCESS_CODES = {0, 200, "0", "200"}
 
 
@@ -62,6 +64,11 @@ def sign_body(body: dict[str, Any], timestamp: str, nonce: str) -> str:
     pairs["appKey"] = APP_KEY
     ordered = "".join(f"{key}={pairs[key]}&" for key in sorted(pairs)) + APP_SECRET
     return hashlib.sha256(ordered.encode("utf-8")).hexdigest()
+
+
+def path_for_log(url: str) -> str:
+    """Path only, so query tokens are not written to the log."""
+    return url.split("?", 1)[0]
 
 
 def _stringify(value: Any) -> str:
@@ -215,17 +222,21 @@ class ZteKidsClient:
             ) as response:
                 text = await response.text()
                 if response.status >= 500:
-                    raise ZteKidsError(f"ZTE Kids returned HTTP {response.status}.")
+                    raise ZteKidsError(f"ZTE Kids returned HTTP {response.status} for {method} {path_for_log(url)}.")
                 payload: dict[str, Any]
                 try:
                     parsed = await response.json(content_type=None)
                 except Exception:
                     parsed = None
                 if not isinstance(parsed, dict):
-                    raise ZteKidsError(text[:200] or f"HTTP {response.status}")
+                    snippet = " ".join(text.split())[:200]
+                    raise ZteKidsError(
+                        f"ZTE Kids returned HTTP {response.status} for {method} {path_for_log(url)} "
+                        f"with a non-JSON body: {snippet or '(empty)'}"
+                    )
                 payload = parsed
         except aiohttp.ClientError as err:
-            raise ZteKidsError("Could not reach ZTE Kids.") from err
+            raise ZteKidsError(f"Could not reach ZTE Kids at {path_for_log(url)}: {err}") from err
         _raise_for_api_error(payload)
         return payload
 
@@ -242,7 +253,8 @@ def _raise_for_api_error(payload: dict[str, Any]) -> None:
         raise ZteKidsCodeRequired(message)
     if code in {401, 403, 1132, 1022, "401", "403", "1132", "1022"} or "token" in lowered or "登录" in message:
         raise ZteKidsAuthError(message)
-    raise ZteKidsError(message)
+    _LOGGER.warning("ZTE Kids API error code=%s message=%s", code, message)
+    raise ZteKidsError(f"ZTE Kids API error {code}: {message}")
 
 
 def _device_lists(payload: dict[str, Any]) -> list[dict[str, Any]]:
