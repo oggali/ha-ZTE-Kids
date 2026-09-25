@@ -71,6 +71,18 @@ def path_for_log(url: str) -> str:
     return url.split("?", 1)[0]
 
 
+def _signature_query(body: dict[str, Any]) -> dict[str, str]:
+    """Query string the server requires on both signed JSON posts and gateway calls."""
+    timestamp = str(int(time.time() * 1000))
+    nonce = uuid.uuid4().hex
+    return {
+        "sign": sign_body(body, timestamp, nonce),
+        "timestamp": timestamp,
+        "nonce": nonce,
+        "appKey": APP_KEY,
+    }
+
+
 def _stringify(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -128,12 +140,17 @@ class ZteKidsClient:
         )
 
     async def list_devices(self, openid: str, access_token: str) -> list[dict[str, str]]:
-        """Return watches linked to the parent account."""
+        """Return watches linked to the parent account.
+
+        The gateway rejects this GET unless openid and accesstoken are both
+        query parameters and covered by the same signature as a signed POST.
+        """
+        fields = {"openid": openid, "accesstoken": access_token}
         url = urljoin(BASE_URL, f"getway/accounts/{openid}/related-device")
         payload = await self._request(
             "GET",
             url,
-            params={"accesstoken": access_token},
+            params={**fields, **_signature_query(fields)},
         )
         devices: list[dict[str, str]] = []
         seen: set[str] = set()
@@ -169,32 +186,26 @@ class ZteKidsClient:
     async def request_location(self, imei: str, openid: str, access_token: str) -> dict[str, Any] | None:
         """Ask the server for the watch's latest fix.
 
-        The app posts this as form fields. A fresh GPS fix is requested from the
-        watch when the server does not already have a recent point, so callers
-        must rate limit it.
+        The app posts openid and accesstoken as form fields and signs that pair.
+        A fresh GPS fix is requested from the watch when the server does not
+        already have a recent point, so callers must rate limit it.
         """
+        fields = {"openid": openid, "accesstoken": access_token}
         url = urljoin(BASE_URL, f"getway/devices/{imei}/location/last")
         payload = await self._request(
             "POST",
             url,
-            data={"openid": openid, "accesstoken": access_token},
+            params=_signature_query(fields),
+            data=fields,
         )
         return _latest_point(payload)
 
     async def _signed_post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        timestamp = str(int(time.time() * 1000))
-        nonce = uuid.uuid4().hex
-        signature = sign_body(body, timestamp, nonce)
         url = urljoin(BASE_URL, path)
         return await self._request(
             "POST",
             url,
-            params={
-                "sign": signature,
-                "timestamp": timestamp,
-                "nonce": nonce,
-                "appKey": APP_KEY,
-            },
+            params=_signature_query(body),
             json_body=body,
         )
 
