@@ -117,7 +117,9 @@ class ZteKidsClient:
         token = data.get("accesstoken") or data.get("accessToken")
         openid = data.get("openid")
         if not token or not openid:
+            _LOGGER.debug("Login response keys: %s", sorted(data) if isinstance(data, dict) else type(data).__name__)
             raise ZteKidsAuthError("Login response did not include a session.")
+        _LOGGER.debug("Login succeeded for openid %s", openid)
         return {
             "accesstoken": token,
             "openid": openid,
@@ -161,17 +163,23 @@ class ZteKidsClient:
             seen.add(imei)
             name = item.get("name") or item.get("phone") or imei
             devices.append({"imei": imei, "name": str(name)})
+        _LOGGER.debug("Related devices: %s", [(device["imei"], device["name"]) for device in devices])
         return devices
 
     async def query_location_history(
         self,
         imei: str,
+        access_token: str,
         *,
         day: str,
         time_zone: int,
         timezone_str: str,
     ) -> dict[str, Any] | None:
-        """Read stored points for one day. This does not wake the watch."""
+        """Read stored points for one day. This does not wake the watch.
+
+        The history service expects the session in a body field named token.
+        Without it the call is signed correctly and still rejected as unauthorized.
+        """
         payload = await self._signed_post(
             "api/device/querylocation",
             {
@@ -179,9 +187,12 @@ class ZteKidsClient:
                 "imei": imei,
                 "timeZone": time_zone,
                 "timezoneStr": timezone_str,
+                "token": access_token,
             },
         )
-        return _latest_point(payload)
+        point = _latest_point(payload)
+        _LOGGER.debug("History for %s on %s (%s): %s", imei, day, timezone_str, _point_for_log(point))
+        return point
 
     async def request_location(self, imei: str, openid: str, access_token: str) -> dict[str, Any] | None:
         """Ask the server for the watch's latest fix.
@@ -198,7 +209,9 @@ class ZteKidsClient:
             params=_signature_query(fields),
             data=fields,
         )
-        return _latest_point(payload)
+        point = _latest_point(payload)
+        _LOGGER.debug("Live fix for %s: %s", imei, _point_for_log(point))
+        return point
 
     async def _signed_post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         url = urljoin(BASE_URL, path)
@@ -221,6 +234,14 @@ class ZteKidsClient:
         headers = {"Accept": "application/json"}
         if json_body is not None:
             headers["Content-Type"] = "application/json"
+        path = path_for_log(url)
+        _LOGGER.debug(
+            "Request %s %s query=%s body=%s",
+            method,
+            path,
+            sorted(params or {}),
+            sorted(json_body or data or {}),
+        )
         try:
             async with self._session.request(
                 method,
@@ -233,7 +254,8 @@ class ZteKidsClient:
             ) as response:
                 text = await response.text()
                 if response.status >= 500:
-                    raise ZteKidsError(f"ZTE Kids returned HTTP {response.status} for {method} {path_for_log(url)}.")
+                    _LOGGER.debug("Response %s %s HTTP %s body=%s", method, path, response.status, " ".join(text.split())[:200])
+                    raise ZteKidsError(f"ZTE Kids returned HTTP {response.status} for {method} {path}.")
                 payload: dict[str, Any]
                 try:
                     parsed = await response.json(content_type=None)
@@ -241,31 +263,60 @@ class ZteKidsClient:
                     parsed = None
                 if not isinstance(parsed, dict):
                     snippet = " ".join(text.split())[:200]
+                    _LOGGER.debug("Response %s %s HTTP %s non-JSON body=%s", method, path, response.status, snippet)
                     raise ZteKidsError(
-                        f"ZTE Kids returned HTTP {response.status} for {method} {path_for_log(url)} "
+                        f"ZTE Kids returned HTTP {response.status} for {method} {path} "
                         f"with a non-JSON body: {snippet or '(empty)'}"
                     )
                 payload = parsed
         except aiohttp.ClientError as err:
-            raise ZteKidsError(f"Could not reach ZTE Kids at {path_for_log(url)}: {err}") from err
-        _raise_for_api_error(payload)
+            _LOGGER.debug("Request %s %s failed: %s", method, path, err)
+            raise ZteKidsError(f"Could not reach ZTE Kids at {path}: {err}") from err
+        _LOGGER.debug("Response %s %s HTTP %s %s", method, path, response.status, _payload_summary(payload))
+        _raise_for_api_error(payload, method=method, path=path)
         return payload
 
 
-def _raise_for_api_error(payload: dict[str, Any]) -> None:
+def _payload_summary(payload: dict[str, Any]) -> str:
+    """Code, message, and data shape. Values that can hold a session are left out."""
+    code = payload.get("code", payload.get("ret"))
+    message = payload.get("msg") or payload.get("message") or payload.get("error") or ""
+    data = payload.get("data")
+    if isinstance(data, dict):
+        shape = ",".join(sorted(str(key) for key in data))
+    elif isinstance(data, list):
+        shape = f"list[{len(data)}]"
+    elif data is None:
+        shape = "null"
+    else:
+        shape = type(data).__name__
+    return f"code={code} msg={message} data={shape}"
+
+
+def _point_for_log(point: dict[str, Any] | None) -> str:
+    if point is None:
+        return "none"
+    return f"type={point.get('loc_type')} time={point.get('timestamp')} accuracy={point.get('accuracy')}"
+
+
+def _raise_for_api_error(payload: dict[str, Any], *, method: str = "", path: str = "") -> None:
     # Success is code/ret 0 or 200. Captcha text means the login needs a second
     # step. 1132/1022 and token wording mean the saved session is dead.
     code = payload.get("code", payload.get("ret"))
     if code is None or code in _SUCCESS_CODES:
         return
     message = str(payload.get("msg") or payload.get("message") or payload.get("error") or code)
+    where = f"{method} {path}".strip()
+    detail = f"{where}: {message}" if where else message
     lowered = message.lower()
     if any(word in lowered for word in ("captcha", "jigsaw", "验证码")):
-        raise ZteKidsCodeRequired(message)
+        _LOGGER.debug("Verification required code=%s %s", code, detail)
+        raise ZteKidsCodeRequired(detail)
     if code in {401, 403, 1132, 1022, "401", "403", "1132", "1022"} or "token" in lowered or "登录" in message:
-        raise ZteKidsAuthError(message)
-    _LOGGER.warning("ZTE Kids API error code=%s message=%s", code, message)
-    raise ZteKidsError(f"ZTE Kids API error {code}: {message}")
+        _LOGGER.warning("ZTE Kids auth error code=%s %s", code, detail)
+        raise ZteKidsAuthError(detail)
+    _LOGGER.warning("ZTE Kids API error code=%s %s", code, detail)
+    raise ZteKidsError(f"ZTE Kids API error {code} for {detail}")
 
 
 def _device_lists(payload: dict[str, Any]) -> list[dict[str, Any]]:

@@ -113,9 +113,11 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
 
         The password is used for this call only. Later polls use the access token.
         """
+        _LOGGER.debug("Starting login update_existing=%s code_supplied=%s", update_existing, bool(code))
         client = ZteKidsClient(async_get_clientsession(self.hass))
         session = await client.login(self._account, self._password, code)
         devices = await client.list_devices(session["openid"], session["accesstoken"])
+        _LOGGER.debug("Login stored %s watches", len(devices))
         if not devices:
             return self.async_abort(reason="no_devices")
         await self.async_set_unique_id(session["openid"])
