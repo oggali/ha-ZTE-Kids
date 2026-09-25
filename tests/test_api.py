@@ -50,6 +50,13 @@ class SignTests(unittest.TestCase):
         self.assertEqual(signature, hashlib.sha256(raw.encode()).hexdigest())
         self.assertEqual(len(signature), 64)
 
+    def test_gateway_query_signs_openid_and_token(self) -> None:
+        fields = {"openid": "parent", "accesstoken": "token"}
+        query = _api._signature_query(fields)
+        self.assertEqual(set(query), {"sign", "timestamp", "nonce", "appKey"})
+        self.assertEqual(query["appKey"], APP_KEY)
+        self.assertEqual(query["sign"], sign_body(fields, query["timestamp"], query["nonce"]))
+
 
 class ParseTests(unittest.TestCase):
     def test_last_location_uses_lot_as_longitude(self) -> None:
