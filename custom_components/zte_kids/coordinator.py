@@ -13,7 +13,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import ZteKidsAuthError, ZteKidsClient, ZteKidsError
-from .const import CONF_ACCESS_TOKEN, CONF_DEVICES, CONF_OPENID, DOMAIN, HISTORY_UPDATE_SECONDS, MIN_REFRESH_SECONDS
+from .const import (
+    CONF_ACCESS_TOKEN,
+    CONF_DEVICES,
+    CONF_OPENID,
+    DOMAIN,
+    HISTORY_UPDATE_SECONDS,
+    MIN_REFRESH_SECONDS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -111,14 +118,105 @@ class ZteKidsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     time_zone=offset,
                     timezone_str=zone,
                 )
-            if point is None:
+            previous = current.get(imei, {})
+            status: dict[str, Any] = {}
+            if not wake:
+                status = await self._status(imei, openid, token, day=day, time_zone=offset, timezone_str=zone)
+            if point is None and not status and imei not in current:
                 _LOGGER.debug("No position stored for %s", imei)
                 continue
-            previous = current.get(imei, {})
             current[imei] = {
                 **previous,
-                **point,
+                **(point or {}),
+                **status,
                 "imei": imei,
                 "name": names.get(imei, previous.get("name", imei)),
             }
         return current
+
+    async def _status(
+        self,
+        imei: str,
+        openid: str,
+        token: str,
+        *,
+        day: str,
+        time_zone: int,
+        timezone_str: str,
+    ) -> dict[str, Any]:
+        """Read stored watch state. A failed call keeps the previous value."""
+        status: dict[str, Any] = {}
+        device = await self._optional(self.client.query_device(imei, openid, token))
+        config = await self._optional(self.client.query_system_config(imei, token))
+        daily = await self._optional(
+            self.client.query_sport(imei, token, day=day, time_zone=time_zone, timezone_str=timezone_str, period="daily")
+        )
+        week = await self._optional(
+            self.client.query_sport(imei, token, day=day, time_zone=time_zone, timezone_str=timezone_str, period="week")
+        )
+        if device:
+            status.update(device)
+        if config:
+            status.update(config)
+        if daily:
+            status.update(daily)
+        if week:
+            status["week_steps"] = week.get("steps")
+            status["week_distance"] = week.get("distance")
+            status["week_calories"] = week.get("calories")
+        lists = {
+            "wifi": self.client.query_wifi(imei, token),
+            "places": self.client.query_places(imei, token),
+            "safe_zones": self.client.query_safe_zones(imei, token),
+            "reminders": self.client.query_reminders(imei, token, day=day),
+            "contacts": self.client.query_contacts(imei, token),
+            "calls": self.client.query_call_log(imei, token),
+            "messages": self.client.query_messages(imei, token),
+        }
+        for key, call in lists.items():
+            result = await self._optional(call)
+            if result is not None:
+                status[key] = result
+        return status
+
+    async def async_save_config(
+        self,
+        imei: str,
+        *,
+        config_type: int,
+        status: int | None = None,
+        mode: int | None = None,
+        state_key: str | None = None,
+        state_value: Any = None,
+    ) -> None:
+        """Write one setting, then read the stored config again."""
+        token = self._entry_data[CONF_ACCESS_TOKEN]
+        await self.client.save_system_config(
+            imei,
+            token,
+            config_type=config_type,
+            status=status,
+            mode=mode,
+        )
+        if state_key is not None:
+            current = dict(self.data or {})
+            watch = dict(current.get(imei) or {})
+            watch[state_key] = state_value
+            current[imei] = watch
+            self.async_set_updated_data(current)
+        config = await self._optional(self.client.query_system_config(imei, token))
+        if config:
+            current = dict(self.data or {})
+            watch = dict(current.get(imei) or {})
+            watch.update(config)
+            current[imei] = watch
+            self.async_set_updated_data(current)
+
+    async def _optional(self, call: Any) -> Any:
+        try:
+            return await call
+        except ZteKidsAuthError:
+            raise
+        except ZteKidsError as err:
+            _LOGGER.debug("Stored-state call failed: %s", err)
+            return None

@@ -9,7 +9,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 
 from .api import ZteKidsError
-from .const import DOMAIN, SERVICE_REFRESH_LOCATION
+from .const import DOMAIN, PLATFORMS, SERVICE_REFRESH_LOCATION
 from .coordinator import ZteKidsCoordinator
 
 type ZteKidsConfigEntry = ConfigEntry[ZteKidsCoordinator]
@@ -46,12 +46,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZteKidsConfigEntry) -> b
 
         hass.services.async_register(DOMAIN, SERVICE_REFRESH_LOCATION, _async_refresh)
 
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.DEVICE_TRACKER])
+    await hass.config_entries.async_forward_entry_setups(entry, [Platform(platform) for platform in PLATFORMS])
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ZteKidsConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, [Platform.DEVICE_TRACKER])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, [Platform(platform) for platform in PLATFORMS])
     if unload_ok and not any(
         item.entry_id != entry.entry_id and item.domain == DOMAIN for item in hass.config_entries.async_entries(DOMAIN)
     ):

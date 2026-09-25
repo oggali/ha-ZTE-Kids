@@ -31,6 +31,11 @@ ZteKidsAuthError = _api.ZteKidsAuthError
 captcha_destination_type = _api.captcha_destination_type
 _latest_point = _api._latest_point
 _raise_for_api_error = _api._raise_for_api_error
+parse_calls = _api.parse_calls
+parse_device = _api.parse_device
+parse_messages = _api.parse_messages
+parse_sport = _api.parse_sport
+parse_system_config = _api.parse_system_config
 sign_body = _api.sign_body
 APP_KEY = _const.APP_KEY
 APP_SECRET = _const.APP_SECRET
@@ -74,6 +79,62 @@ class ParseTests(unittest.TestCase):
     def test_login_failed_is_auth(self) -> None:
         with self.assertRaises(ZteKidsAuthError):
             _raise_for_api_error({"code": 1132, "msg": "用户登录失败", "data": None})
+
+    def test_system_config_reads_battery_and_sos(self) -> None:
+        parsed = parse_system_config(
+            {
+                "data": {
+                    "battery": {"percent": 0, "updateTime": 1700000000000},
+                    "batterySwitch": 1,
+                    "locMode": 2,
+                    "sos": {"sos1": "112", "sos2": "", "sos3": "0500"},
+                }
+            }
+        )
+        self.assertEqual(parsed["battery"], 0)
+        self.assertEqual(parsed["battery_updated"], 1700000000000)
+        self.assertEqual(parsed["sos"], ["112", "0500"])
+        self.assertTrue(parsed["battery_switch"])
+        self.assertEqual(parsed["location_mode"], 2)
+
+    def test_system_config_reads_setting_flags(self) -> None:
+        parsed = parse_system_config({"data": {"sportsSwitch": 0, "callWhitelist": 1, "locMode": 3}})
+        self.assertFalse(parsed["sports"])
+        self.assertTrue(parsed["call_whitelist"])
+        self.assertEqual(parsed["location_mode"], 3)
+
+    def test_device_online_and_heart_rate(self) -> None:
+        parsed = parse_device(
+            {"data": {"onlineStatus": 1, "model": "Kids", "lastHeartRate": "88", "lastHeartRateTime": 10}}
+        )
+        self.assertTrue(parsed["online"])
+        self.assertEqual(parsed["heart_rate"], 88)
+        self.assertEqual(parsed["model"], "Kids")
+
+    def test_sport_prefers_daily_total_over_hourly_parts(self) -> None:
+        parsed = parse_sport(
+            {
+                "data": [
+                    {"step": 100, "totalStep": 4000, "distance": 0.2, "totalDistance": 1.5, "calorie": 10, "totalCalorie": 80},
+                    {"step": 200, "totalStep": 4000, "distance": 0.3, "totalDistance": 1.5, "calorie": 20, "totalCalorie": 80, "target": 8000},
+                ]
+            }
+        )
+        self.assertEqual(parsed["steps"], 4000)
+        self.assertEqual(parsed["distance"], 1.5)
+        self.assertEqual(parsed["calories"], 80)
+        self.assertEqual(parsed["step_goal"], 8000)
+
+    def test_sport_sums_hourly_rows_without_a_total(self) -> None:
+        parsed = parse_sport({"data": [{"step": 10, "distance": 0.1, "calorie": 2}, {"num": 15}]})
+        self.assertEqual(parsed["steps"], 25)
+        self.assertEqual(parsed["distance"], 0.1)
+
+    def test_call_and_message_pages(self) -> None:
+        calls = parse_calls({"data": {"records": [{"phone": "0500", "name": "Home", "timestamp": 5, "type": "in"}]}})
+        messages = parse_messages({"data": [{"content": "ok", "phone": "0500", "timestamp": 6}]})
+        self.assertEqual(calls[0]["phone"], "0500")
+        self.assertEqual(messages[0]["content"], "ok")
 
 
 if __name__ == "__main__":

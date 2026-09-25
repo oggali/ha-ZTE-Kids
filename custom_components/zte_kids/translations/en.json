@@ -35,9 +35,105 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "online": {
+        "name": "Online"
+      },
+      "long_life_mode": {
+        "name": "Long life mode"
+      },
+      "low_battery_alert": {
+        "name": "Low battery alert"
+      },
+      "call_whitelist": {
+        "name": "Call whitelist"
+      },
+      "position_reports": {
+        "name": "Position reports"
+      },
+      "sms_filter": {
+        "name": "SMS filter"
+      },
+      "auto_answer": {
+        "name": "Auto answer"
+      },
+      "scheduled_power_off": {
+        "name": "Scheduled power off"
+      },
+      "app_install": {
+        "name": "App install"
+      }
+    },
+    "button": {
+      "find_watch": {
+        "name": "Find watch"
+      }
+    },
+    "select": {
+      "location_mode": {
+        "name": "Location mode",
+        "state": {
+          "1": "Mode 1",
+          "2": "Mode 2",
+          "3": "Mode 3"
+        }
+      }
+    },
+    "switch": {
+      "sports": {
+        "name": "Sports"
+      },
+      "do_not_disturb": {
+        "name": "Do not disturb"
+      }
+    },
     "device_tracker": {
       "watch": {
         "name": "Watch"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "steps": {
+        "name": "Steps"
+      },
+      "distance": {
+        "name": "Distance"
+      },
+      "calories": {
+        "name": "Calories"
+      },
+      "heart_rate": {
+        "name": "Heart rate"
+      },
+      "temperature": {
+        "name": "Temperature"
+      },
+      "wifi": {
+        "name": "Wi-Fi networks"
+      },
+      "safe_zones": {
+        "name": "Safe zones"
+      },
+      "places": {
+        "name": "Places"
+      },
+      "reminders": {
+        "name": "Reminders"
+      },
+      "sos": {
+        "name": "SOS numbers"
+      },
+      "contacts": {
+        "name": "Contacts"
+      },
+      "calls": {
+        "name": "Calls"
+      },
+      "messages": {
+        "name": "Messages"
       }
     }
   },

@@ -40,30 +40,64 @@ Add the **ZTE Kids** integration and sign in with the email and password from th
 - One entry per parent account. The openid is the unique id.
 - A rejected session starts reauthentication. Enter the password again; the entry is updated in place.
 
-## Location updates
+## Updates
 
-Scheduled polling and a manual refresh are different API calls.
+Scheduled polling reads data the server already stored. A manual refresh is the only call that can wake the watch.
 
 | | History poll | Refresh location |
 | --- | --- | --- |
 | When | Every 5 minutes | `zte_kids.refresh_location` |
-| Endpoint | `api/device/querylocation` | `getway/devices/{imei}/location/last` |
-| Effect on the watch | Reads points the server already stored for today | Can ask the watch for a new fix |
+| Location | `api/device/querylocation` | `getway/devices/{imei}/location/last` |
+| Other state | Battery, steps, zones, contacts, and the rest of the table below | Not requested |
+| Effect on the watch | Reads stored data | Can ask the watch for a new fix |
 | Limit | The update interval | Once a minute per watch |
 
-The history call uses today's date in the Home Assistant time zone. A refresh that returns no point falls back to that same history.
+The history call uses today's date in the Home Assistant time zone. A refresh that returns no point falls back to that same history. If one of the extra status calls fails, the last good value for that sensor stays and location still updates. A rejected session still starts reauthentication.
 
 `zte_kids.refresh_location` takes a device target. With no target, every configured watch is included. A watch still inside the one-minute window is skipped. The service fails when every targeted watch was skipped, or when no targeted device belongs to this integration.
 
 ## Entities
 
-Each watch is a GPS `device_tracker`. The entity is named from the device name plus **Watch**.
+Each watch is one device, `(zte_kids, <imei>)`. Entity names are the device name plus the name in the table.
 
-State attributes:
+| Entity | State | Attributes |
+| --- | --- | --- |
+| Watch (`device_tracker`) | GPS position | `imei`, `address`, `location_type`, `gps_timestamp` |
+| Online | Connected or not | `model`, `phone` |
+| Long life mode, low battery alert, call whitelist, position reports, SMS filter, auto answer, scheduled power off, app install | On or off, as last stored. These are not changed from Home Assistant | |
+| Sports | Switch. Turns step counting on or off | |
+| Do not disturb | Switch. Turns quiet hours on or off | |
+| Location mode | Mode 1, 2, or 3 | |
+| Find watch | Button. Asks the watch to ring | |
+| Battery | Percent | `updated`, `low_battery_alert`, `long_life_mode`, `location_mode` |
+| Steps | Steps today | `goal`, `week_steps`, `week_distance`, `week_calories` |
+| Distance | Kilometres today | |
+| Calories | kcal today | |
+| Heart rate | bpm, when the server has one | `updated` |
+| Temperature | °C, when the server has one | `updated` |
+| Wi-Fi networks | How many are stored | `wifi` (`ssid`, `signal`) |
+| Safe zones | How many rules | `safe_zones` (`name`, `enabled`) |
+| Places | How many saved places | `places` (`name`, `detail`, `range`) |
+| Reminders | How many for today | `reminders` (`content`, `label`, `time`, `date`) |
+| SOS numbers | How many | `sos` |
+| Contacts | How many | `contacts` (`name`, `phone`) |
+| Calls | How many on the first page | `calls` (`name`, `phone`, `time`, `direction`) |
+| Messages | How many on the first page | `messages` (`content`, `phone`, `time`) |
 
-- `imei`
-- `address`
-- `location_type`
-- `gps_timestamp`
+Positions of `0,0` are ignored. Some API payloads spell longitude `lot`; that field is accepted. Heart rate and temperature stay unknown until a payload includes them. Calls and messages are the first page of history the server has stored, not a live download from the watch.
 
-The device registry identifier is `(zte_kids, <imei>)`. Positions of `0,0` are ignored. Some API payloads spell longitude `lot`; that field is accepted.
+Status endpoints used by the 5-minute poll:
+
+| Data | Endpoint |
+| --- | --- |
+| Online, model, heart rate, temperature | `getway/devices/{imei}` |
+| Battery, location mode, SOS, and the on/off flags | `api/device/query/systemconfig` |
+| Change a setting or ring the watch | `api/device/save/systemconfig` |
+| Steps, distance, calories | `api/sport/query/daily` and `api/sport/query/week` |
+| Wi-Fi | `api/device/wifilist` |
+| Places | `api/addr/query` |
+| Safe zones | `api/guardrule/query` |
+| Reminders | `api/scheduleReminder/queryByWeek` |
+| Contacts | `api/device/query/contact` |
+| Calls | `api/message/calllog/query` |
+| Messages | `api/message/sms/query` |
