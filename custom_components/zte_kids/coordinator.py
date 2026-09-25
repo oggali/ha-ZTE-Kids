@@ -62,6 +62,7 @@ class ZteKidsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             wait = MIN_REFRESH_SECONDS - (now - previous)
             if wait > 0:
                 skipped[imei] = f"Wait {int(wait)}s before asking this watch again."
+                _LOGGER.debug("Skip live fix for %s, %.0fs left in the cooldown", imei, wait)
             else:
                 due.append(imei)
                 # Reserve the slot before the request so overlapping calls cannot both wake the watch.
@@ -87,6 +88,14 @@ class ZteKidsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         zone = self.hass.config.time_zone or "UTC"
         selected = imeis or [device["imei"] for device in self.devices]
         names = {device["imei"]: device.get("name") or device["imei"] for device in self.devices}
+        _LOGGER.debug(
+            "Update wake=%s watches=%s day=%s zone=%s offset=%s",
+            wake,
+            selected,
+            day,
+            zone,
+            offset,
+        )
 
         for imei in selected:
             point = None
@@ -97,11 +106,13 @@ class ZteKidsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             if point is None:
                 point = await self.client.query_location_history(
                     imei,
+                    token,
                     day=day,
                     time_zone=offset,
                     timezone_str=zone,
                 )
             if point is None:
+                _LOGGER.debug("No position stored for %s", imei)
                 continue
             previous = current.get(imei, {})
             current[imei] = {
