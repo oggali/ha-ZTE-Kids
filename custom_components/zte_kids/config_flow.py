@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 # voluptuous ships with Home Assistant, so it is not a manifest requirement.
@@ -22,6 +23,8 @@ from .const import (
     CONF_USER_NAME,
     DOMAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -44,7 +47,8 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
                 return await self.async_step_code()
             except ZteKidsAuthError:
                 errors["base"] = "invalid_auth"
-            except ZteKidsError:
+            except ZteKidsError as err:
+                _LOGGER.exception("ZTE Kids login failed: %s", err)
                 errors["base"] = "cannot_connect"
         return self.async_show_form(
             step_id="user",
@@ -64,14 +68,16 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is None:
             try:
                 await client.send_captcha(self._account)
-            except ZteKidsError:
+            except ZteKidsError as err:
+                _LOGGER.exception("ZTE Kids verification-code request failed: %s", err)
                 errors["base"] = "cannot_connect"
         else:
             try:
                 return await self._async_login(user_input[CONF_CODE].strip())
             except ZteKidsAuthError:
                 errors["base"] = "invalid_auth"
-            except ZteKidsError:
+            except ZteKidsError as err:
+                _LOGGER.exception("ZTE Kids login with code failed: %s", err)
                 errors["base"] = "cannot_connect"
         return self.async_show_form(
             step_id="code",
@@ -93,7 +99,8 @@ class ZteKidsConfigFlow(ConfigFlow, domain=DOMAIN):
                 return await self.async_step_code()
             except ZteKidsAuthError:
                 errors["base"] = "invalid_auth"
-            except ZteKidsError:
+            except ZteKidsError as err:
+                _LOGGER.exception("ZTE Kids reauthentication failed: %s", err)
                 errors["base"] = "cannot_connect"
         return self.async_show_form(
             step_id="reauth_confirm",
