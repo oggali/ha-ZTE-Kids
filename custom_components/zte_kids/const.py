@@ -34,5 +34,11 @@ MIN_REFRESH_SECONDS = 60
 # How often stored location history is read. That call does not wake the watch.
 HISTORY_UPDATE_SECONDS = 300
 
-PLATFORMS = ["device_tracker"]
+PLATFORMS = ["binary_sensor", "button", "device_tracker", "select", "sensor", "switch"]
+
+# api/device/save/systemconfig type values used by the parent app.
+CONFIG_LOCATION_MODE = 1
+CONFIG_FIND_WATCH = 4
+CONFIG_DO_NOT_DISTURB = 6
+CONFIG_SPORTS = 17
 SERVICE_REFRESH_LOCATION = "refresh_location"

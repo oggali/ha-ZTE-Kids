@@ -6,13 +6,12 @@ from typing import Any
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import ZteKidsConfigEntry
-from .const import DOMAIN
 from .coordinator import ZteKidsCoordinator
+from .entity import watch_device_info
 
 
 async def async_setup_entry(
@@ -38,12 +37,7 @@ class ZteKidsTracker(CoordinatorEntity[ZteKidsCoordinator], TrackerEntity):
         self._imei = device["imei"]
         self._device_name = device.get("name") or device["imei"]
         self._attr_unique_id = self._imei
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._imei)},
-            name=self._device_name,
-            manufacturer="ZTE",
-            model="Kids watch",
-        )
+        self._attr_device_info = watch_device_info(self._imei, self._device_name)
 
     @property
     def source_type(self) -> SourceType:
@@ -93,4 +87,5 @@ class ZteKidsTracker(CoordinatorEntity[ZteKidsCoordinator], TrackerEntity):
         point = self._point
         if point and point.get("name"):
             self._device_name = point["name"]
+            self._attr_device_info = watch_device_info(self._imei, self._device_name, point.get("model"))
         super()._handle_coordinator_update()
