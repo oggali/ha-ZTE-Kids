@@ -1,12 +1,18 @@
-# Open or update a pull request when feature/refactor branches are pushed.
+# Open or update a pull request when feature/refactor branches are pushed,
+# then squash-merge it once unit tests pass.
 #
-# All PRs target master.
+# All PRs target main.
 #
-# Important: the workflow file must exist on the branch being pushed (merge master
+# The workflow file must exist on the branch being pushed (merge main
 # or copy this file onto older branches once).
 #
 # One-time repo setup: Settings → Actions → General → Workflow permissions →
 # "Allow GitHub Actions to create and approve pull requests".
+# The merge job also needs permission to push to main (no required reviews,
+# or Actions allowed to bypass them).
+#
+# A merge made with GITHUB_TOKEN does not start other workflows. A version
+# bump merged this way will not run the release workflow by itself.
 #
 # Override base: [pr-base=branch-name] in a commit message (rare).
 name: Auto PR
@@ -28,8 +34,29 @@ permissions:
   pull-requests: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: pip install aiohttp cryptography
+
+      - name: Run unit tests
+        run: python -m unittest tests/test_api.py -v
+
   open-pr:
     runs-on: ubuntu-latest
+    outputs:
+      pull_number: ${{ steps.pr.outputs.pull_number }}
     steps:
       - name: Resolve base branch and title
         id: meta
@@ -67,6 +94,7 @@ jobs:
             core.setOutput("title", title);
 
       - name: Create or update pull request
+        id: pr
         uses: actions/github-script@v7
         env:
           HEAD_BRANCH: ${{ github.event.inputs.branch || github.ref_name }}
@@ -81,6 +109,8 @@ jobs:
               "",
               `- **Head:** \`${head}\``,
               `- **Base:** \`${base}\``,
+              "",
+              "Unit tests run in this workflow. A green run squash-merges this pull request.",
             ];
 
             bodyParts.push(
@@ -113,6 +143,7 @@ jobs:
                   title,
                   body,
                 });
+                core.setOutput("pull_number", String(pull.number));
                 core.info(`Updated PR #${pull.number}: ${head} -> ${base}`);
                 return;
               }
@@ -125,6 +156,7 @@ jobs:
                 title,
                 body,
               });
+              core.setOutput("pull_number", String(created.number));
               core.info(`Created PR #${created.number}: ${head} -> ${base}`);
             } catch (error) {
               if (error?.message?.includes("not permitted to create or approve pull requests")) {
@@ -133,3 +165,70 @@ jobs:
               }
               throw error;
             }
+
+  merge:
+    needs: [test, open-pr]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Squash-merge pull request
+        uses: actions/github-script@v7
+        env:
+          PULL_NUMBER: ${{ needs.open-pr.outputs.pull_number }}
+        with:
+          script: |
+            const pullNumber = Number(process.env.PULL_NUMBER);
+            if (!pullNumber) {
+              core.setFailed("No pull request number from the open-pr job.");
+              return;
+            }
+
+            const { data: pull } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+            });
+
+            if (pull.merged) {
+              core.info(`PR #${pullNumber} is already merged.`);
+              return;
+            }
+            if (pull.state !== "open") {
+              core.setFailed(`PR #${pullNumber} is ${pull.state}; refusing to merge.`);
+              return;
+            }
+
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            let lastError;
+            for (let attempt = 1; attempt <= 5; attempt++) {
+              try {
+                const { data } = await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pullNumber,
+                  merge_method: "squash",
+                  commit_title: `${pull.title} (#${pullNumber})`,
+                  commit_message: "Auto-merged by .github/workflows/auto-pr.yml after unit tests passed.",
+                });
+                core.info(`Squash-merged PR #${pullNumber}: ${data.sha}`);
+                return;
+              } catch (error) {
+                lastError = error;
+                const retry = error.status === 405 || error.status === 409;
+                core.warning(
+                  `Merge attempt ${attempt} failed (${error.status || "unknown"}): ${error.message}`
+                );
+                if (!retry || attempt === 5) {
+                  break;
+                }
+                await sleep(4000);
+              }
+            }
+
+            core.setFailed(
+              `Could not squash-merge PR #${pullNumber}: ${lastError?.message || "unknown error"}\n\n` +
+                "If main requires a review or status check, allow this workflow to bypass it, " +
+                "or merge the pull request by hand."
+            );
