@@ -34,6 +34,8 @@ The version in `manifest.json` is `Year.Month.Day`. Pushing a new version to `ma
 
 Add the **ZTE Kids** integration and sign in with the email and password from the ZTE Kids app. The international app accepts an email address, and that address is sent as `loginName`.
 
+Use a parent account that is not signed in on a phone. The ZTE Kids server keeps one session per account. Signing in here replaces that session and logs the ZTE Kids app out on the phone. Logging the phone back in then invalidates Home Assistant, and the next sign-in here logs the phone out again. Add a second parent on the same watch and use that account only for this integration.
+
 - Login uses the password once. The config entry keeps the access token, openid, display name, and the list of watches.
 - When the server asks for a verification code, a second step requests a text message and asks you to enter it.
 - Setup stops if the account has no watches.
